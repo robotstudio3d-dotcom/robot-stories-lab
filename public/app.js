@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 let engine=localStorage.getItem("rsLabEngine")||"";
 let current=null;
-const STEPS=["baseline","plan","rs","arbiter","editor","reader","diagnostic"];
+const STEPS=["baseline","plan","validator","rs","arbiter","editor","reader","diagnostic"];
 
 function setStatus(s){$("status").textContent=s}
 function parseJSON(t){try{return JSON.parse(t)}catch{const m=t.match(/\{[\s\S]*\}/);if(m)try{return JSON.parse(m[0])}catch{}return{raw:t}}}
@@ -26,6 +26,7 @@ function display(e){
  $("labelX").textContent=o.baselineLabel==="X"?"BASELINE":o.rsLabel==="X"?"ROBOT STORIES":"—";
  $("labelY").textContent=o.baselineLabel==="Y"?"BASELINE":o.rsLabel==="Y"?"ROBOT STORIES":"—";
  $("plan").textContent=JSON.stringify(e.plan||{},null,2);
+ $("validator").textContent=JSON.stringify(e.validator||{},null,2);
  $("arbiter").textContent=JSON.stringify(e.arbiter||{},null,2);
  $("editor").textContent=JSON.stringify(e.editor||{},null,2);
  $("reader").textContent=JSON.stringify(e.reader||{},null,2);
@@ -55,12 +56,13 @@ async function execute(exp,fromIndex=0){
    exp.runningStep=step;exp.failedStep=null;save(exp);
    const gp=exp.genProvider, ep=exp.evalProvider;
    if(step==="baseline"){setStatus("1/7 Baseline isolata…");const r=await api("baseline",{seed:exp.seed,words:exp.words,language:exp.language},gp);exp.baseline=r.text;exp.meta.baseline=r}
-   if(step==="plan"){setStatus("2/7 Compilo gli artefatti Robot Stories…");const r=await api("rs_plan",{engine,seed:exp.seed,words:exp.words,language:exp.language},gp);exp.plan=parseJSON(r.text);exp.planRaw=r.text;exp.meta.plan=r}
-   if(step==="rs"){setStatus("3/7 Genero la prosa dal piano congelato…");const r=await api("robot_stories",{engine,plan:exp.planRaw,seed:exp.seed,words:exp.words,language:exp.language},gp);exp.rs=r.text;exp.meta.rs=r;exp.order=chooseOrder(exp.baseline,exp.rs)}
-   if(step==="arbiter"){setStatus("4/7 Arbitro: piano + prosa…");const r=await api("arbiter",{engine,plan:exp.planRaw,story:exp.rs},ep);exp.arbiter=parseJSON(r.text);exp.meta.arbiter=r}
-   if(step==="editor"){setStatus("5/7 Editor cieco…");const r=await api("editor",{x:exp.order.x,y:exp.order.y},ep);exp.editor=parseJSON(r.text);exp.meta.editor=r}
-   if(step==="reader"){setStatus("6/7 Reader cieco…");const r=await api("reader",{x:exp.order.x,y:exp.order.y},ep);exp.reader=parseJSON(r.text);exp.meta.reader=r}
-   if(step==="diagnostic"){setStatus("7/7 Diagnosi…");const r=await api("diagnostic",{arbiter:JSON.stringify(exp.arbiter),editor:JSON.stringify(exp.editor),reader:JSON.stringify(exp.reader),baselineLabel:exp.order.baselineLabel,rsLabel:exp.order.rsLabel},ep);exp.diagnostic=parseJSON(r.text);exp.meta.diagnostic=r}
+   if(step==="plan"){setStatus("2/8 Compilo gli artefatti Robot Stories…");const r=await api("rs_plan",{engine,seed:exp.seed,words:exp.words,language:exp.language},gp);exp.plan=parseJSON(r.text);exp.planRaw=r.text;exp.meta.plan=r}
+   if(step==="validator"){setStatus("3/8 VALIDATOR: controllo bloccante prima della prosa…");const r=await api("validate_plan",{plan:exp.plan,words:exp.words});exp.validator=r.validation;exp.meta.validator=r;if(!r.validation?.pass){throw new Error("PRE-PROSE BLOCK: "+(r.validation?.blocking_errors||[]).join(" | "))}}
+   if(step==="rs"){setStatus("4/8 Genero la prosa solo dal piano validato…");const r=await api("robot_stories",{engine,plan:exp.planRaw,validation:exp.validator,seed:exp.seed,words:exp.words,language:exp.language},gp);exp.rs=r.text;exp.meta.rs=r;exp.order=chooseOrder(exp.baseline,exp.rs)}
+   if(step==="arbiter"){setStatus("5/8 Arbitro: piano + prosa…");const r=await api("arbiter",{engine,plan:exp.planRaw,story:exp.rs},ep);exp.arbiter=parseJSON(r.text);exp.meta.arbiter=r}
+   if(step==="editor"){setStatus("6/8 Editor cieco…");const r=await api("editor",{x:exp.order.x,y:exp.order.y},ep);exp.editor=parseJSON(r.text);exp.meta.editor=r}
+   if(step==="reader"){setStatus("7/8 Reader cieco…");const r=await api("reader",{x:exp.order.x,y:exp.order.y},ep);exp.reader=parseJSON(r.text);exp.meta.reader=r}
+   if(step==="diagnostic"){setStatus("8/8 Diagnosi…");const r=await api("diagnostic",{arbiter:JSON.stringify(exp.arbiter),editor:JSON.stringify(exp.editor),reader:JSON.stringify(exp.reader),baselineLabel:exp.order.baselineLabel,rsLabel:exp.order.rsLabel},ep);exp.diagnostic=parseJSON(r.text);exp.meta.diagnostic=r}
    exp.completed.push(step);exp.runningStep=null;exp.status=exp.completed.length===STEPS.length?"COMPLETE":"PARTIAL";save(exp);
   }
   setStatus("Esperimento completo. Tutto salvato nel browser.");
@@ -73,7 +75,7 @@ $("runBtn").onclick=()=>{if(!requireEngine())return;const exp={id:crypto.randomU
 $("resumeBtn").onclick=()=>{if(!current){setStatus("Nessun test da riprendere.");return}const idx=STEPS.findIndex(s=>!current.completed.includes(s));if(idx<0){setStatus("Il test è già completo.");return}execute(current,idx)};
 $("retryBtn").onclick=()=>{if(!current?.failedStep){setStatus("Nessuna fase fallita.");return}const idx=STEPS.indexOf(current.failedStep);execute(current,Math.max(0,idx))};
 $("exportBtn").onclick=()=>{if(!current){setStatus("Nessun test da esportare.");return}const b=new Blob([JSON.stringify(current,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`rs-lab-${current.status.toLowerCase()}-${current.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setStatus(`Esportato JSON ${current.status}.`)};
-$("clearBtn").onclick=()=>{current=null;["storyX","storyY"].forEach(x=>$(x).textContent="—");["plan","arbiter","editor","reader","diagnostic"].forEach(x=>$(x).textContent="—");setStatus("Vista pulita. I test salvati non sono stati cancellati.")};
+$("clearBtn").onclick=()=>{current=null;["storyX","storyY"].forEach(x=>$(x).textContent="—");["plan","validator","arbiter","editor","reader","diagnostic"].forEach(x=>$(x).textContent="—");setStatus("Vista pulita. I test salvati non sono stati cancellati.")};
 async function status(){try{const r=await fetch("/api/status");const s=await r.json();const p=Object.entries(s.providers).map(([k,v])=>`${k}:${v.configured?"✓":"×"} ${v.model}`).join(" · ");$("apiPill").textContent=p}catch{$("apiPill").textContent="API offline"}}
 if(engine)$("engineState").textContent=`Motore già salvato nel browser · ${Math.round(engine.length/1000)}k caratteri`;
 const saved=localStorage.getItem("rsLabCurrent");if(saved){try{current=JSON.parse(saved);display(current)}catch{}}

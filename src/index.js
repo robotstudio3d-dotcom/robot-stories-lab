@@ -73,6 +73,41 @@ async function callWithFallback(env,preferred,prompt,temp,maxTokens,allowFallbac
   }
   throw new Error(errors.join(" | "));
 }
+
+function textValue(v){
+  if(v==null) return "";
+  if(typeof v==="string") return v.trim();
+  if(typeof v==="number"||typeof v==="boolean") return String(v);
+  try{return JSON.stringify(v)}catch{return ""}
+}
+function wordCount(v){return textValue(v).split(/\s+/).filter(Boolean).length}
+function validatePlan(plan,targetWords=500){
+  const blocking=[], warnings=[], checks=[];
+  const artifacts=plan?.artifacts;
+  const reg=plan?.registro_unico;
+  const add=(id,pass,detail,severity="BLOCKING")=>{checks.push({id,pass,detail,severity});if(!pass){(severity==="BLOCKING"?blocking:warnings).push(`${id}: ${detail}`)}};
+  add("JSON",!!plan && typeof plan==="object" && !Array.isArray(plan),"Piano JSON valido");
+  add("ARTIFACTS",!!artifacts && typeof artifacts==="object","Oggetto artifacts presente");
+  const always=["A1","A3","A4","A5","A6","A8","A9","A11","A13","A15","A17"];
+  for(const a of always) add(a,wordCount(artifacts?.[a])>=3,`${a} deve contenere evidenza testuale, non una dichiarazione vuota`);
+  const a6=textValue(artifacts?.A6);
+  const a6wc=wordCount(a6), minA6=Math.max(40,Math.ceil(Number(targetWords||500)*0.10)), maxA6=Math.max(minA6+20,Math.ceil(Number(targetWords||500)*0.18));
+  const looksLikeSummary=/testo del finale|ultima scena|finale (bloccato|previsto)|scena in prosa|sar[aà]|dovr[aà]/i.test(a6) && a6wc<minA6;
+  add("A6_INTEGRAL_PROSE",a6wc>=minA6 && !looksLikeSummary,`A6 deve essere l'ultima scena in prosa integrale: ${a6wc} parole; minimo operativo ${minA6}`);
+  if(a6wc>maxA6) warnings.push(`A6_BAND: ${a6wc} parole, sopra la banda 10-18% (${minA6}-${maxA6})`);
+  const regKeys=["regole_del_mondo","capacita_e_oggetti","informazioni","personaggi","onomastica","continuita","semine_e_payoff","catena_domande","codice_ritmico","mappa_ancoraggio","immagine_persistente","contratto_di_lettura","decisioni","scarti"];
+  add("N8_REGISTRO",!!reg && typeof reg==="object","Registro Unico presente");
+  if(reg && typeof reg==="object") for(const k of regKeys) add(`N8.${k}`,Object.prototype.hasOwnProperty.call(reg,k),`Campo obbligatorio ${k} presente`);
+  const a15=textValue(artifacts?.A15);
+  const evidenceRows=(a15.match(/(?:zero|PASS|FAIL|SUPERATO|FALLITO|direzionale|CR\d+|P\d+|RA\d+|A\d+)/gi)||[]).length;
+  add("N10_A15_EVIDENCE",evidenceRows>=3,`A15 deve mostrare scansioni V2/V3 con righe/misure verificabili; indicatori trovati: ${evidenceRows}`);
+  const gates=Array.isArray(plan?.gates_pre_prosa)?plan.gates_pre_prosa:[];
+  add("PRE_GATES",gates.length>0,"gates_pre_prosa deve contenere verifiche con evidenza");
+  const unsupported=gates.filter(g=>/pass|superat/i.test(textValue(g?.status||g?.esito)) && wordCount(g?.evidence||g?.evidenza||g?.reference||g?.riferimento)<1);
+  add("GATE_EVIDENCE",unsupported.length===0,`${unsupported.length} gate dichiarati superati senza evidenza`);
+  return {pass:blocking.length===0,status:blocking.length?"BLOCKED":"PASS",target_words:Number(targetWords),a6_words:a6wc,a6_expected_band:[minA6,maxA6],blocking_errors:blocking,warnings,checks,validated_at:new Date().toISOString()};
+}
+
 function baselinePrompt(seed,words,language){
 return `Scrivi un racconto completo in ${language}.
 Target orientativo: ${words} parole.
@@ -101,7 +136,7 @@ ${seed}
 RESTITUISCI JSON VALIDO, senza markdown:
 {
  "engine_version":"...",
- "artifacts":{"A1":{},"A2":{},"A3":{},"A4":{},"A5":{},"A6":{},"A7":{},"A8":{},"A9":{},"A10":{},"A11":{},"A12":{},"A13":{},"A14":{},"A15":{},"A16":{},"A17":{},"A18":{},"A19":{}},
+ "artifacts":{"A1":"evidenza completa o riferimento al registro_unico","A2":"testo/N-A motivato","A3":"testo con azioni e costi","A4":"progressione concreta","A5":"contratto terminale completo","A6":"ULTIMA SCENA IN PROSA INTEGRALE, non descrizione o sinossi","A7":"testo/N-A motivato","A8":"mappa completa","A9":"profilo con valori/bande","A10":"N-A se non previsto dal motore","A11":"mappa completa","A12":"testo/N-A motivato","A13":"contratto completo","A14":"testo/N-A motivato","A15":"righe V2 una per codice + misure V3 o 'direzionale, non conteggiato'","A16":"testo/N-A motivato","A17":"una voce per ogni scena prevista","A18":"testo/N-A motivato","A19":"PRE-PROSA: N-A, da produrre post-prosa se il motore lo colloca dopo la prosa"},
  "registro_unico":{},
  "characters":[],
  "causal_map":[],
@@ -110,7 +145,13 @@ RESTITUISCI JSON VALIDO, senza markdown:
  "risks":[],
  "notes":""
 }
-Mantieni il JSON sufficientemente dettagliato da poter verificare l'esecuzione, ma non trasformarlo in un saggio.`;
+VINCOLI DI SERIALIZZAZIONE DEL LAB:
+- A6 deve contenere davvero la scena finale integrale in prosa. Una frase che descrive cosa accadrà NON è A6.
+- registro_unico deve mantenere TUTTI i campi richiesti da N8, anche quando un array è vuoto.
+- A15 deve contenere evidenza esplicita delle verifiche V2/V3 secondo N10, non la frase "verificato".
+- gates_pre_prosa: ogni PASS/SUPERATO deve avere un campo evidence/riferimento non vuoto.
+- Se non riesci a produrre questi elementi, restituisci comunque il JSON ma marca il gate FALLITO. Non fingere conformità.
+Mantieni il JSON dettagliato quanto serve alla verifica.`;
 }
 function storyPrompt(engine,plan,seed,words,language){
 return `${engine}
@@ -240,6 +281,7 @@ export default {
       if(!allowed(request,env)) return J({error:"Accesso negato"},401);
       try{
         const body=await request.json();
+        if(body.action==="validate_plan") return J({validation:validatePlan(body.plan,body.words)});
         const out=await runAction(body,env);
         return J(out);
       }catch(e){return J({error:e.message||String(e)},500)}
