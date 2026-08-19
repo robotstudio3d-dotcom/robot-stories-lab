@@ -153,6 +153,40 @@ VINCOLI DI SERIALIZZAZIONE DEL LAB:
 - Se non riesci a produrre questi elementi, restituisci comunque il JSON ma marca il gate FALLITO. Non fingere conformità.
 Mantieni il JSON dettagliato quanto serve alla verifica.`;
 }
+function repairPlanPrompt(engine,plan,validation,seed,words,language,attempt){
+return `${engine}
+
+=== ROBOT STORIES LAB / PRE-PROSE AUTO-REPAIR ${attempt}/2 ===
+NON SCRIVERE IL RACCONTO FINALE.
+NON RIGENERARE DA ZERO IL PIANO.
+Il Validator deterministico ha bloccato il piano. Correggi ESCLUSIVAMENTE le violazioni indicate.
+Conserva invariati tutti gli artefatti già validi, salvo modifiche strettamente necessarie per coerenza causale.
+
+INNESCO:
+${seed}
+
+LINGUA: ${language}
+TARGET RACCONTO: ${words} parole
+
+PIANO ATTUALE:
+${plan}
+
+VERDETTO DEL VALIDATOR:
+${JSON.stringify(validation)}
+
+REGOLE DI RIPARAZIONE:
+1. Ogni blocking_error deve essere risolto materialmente, non dichiarato risolto.
+2. Se A6_INTEGRAL_PROSE fallisce, sostituisci artifacts.A6 con la VERA ULTIMA SCENA già scritta in prosa narrativa integrale. Non sinossi, non appunti, non futuro programmatico. Deve superare il minimo parole indicato dal Validator.
+3. Se N10_A15_EVIDENCE fallisce, riscrivi artifacts.A15 mostrando scansioni V2/V3 verificabili: righe/codici, esito, misura o evidenza concreta. "Verificato", "PASS" o "SUPERATO" senza prova non valgono.
+4. Se fallisce un campo N8, aggiungi quel campo al registro_unico mantenendo gli altri.
+5. Se fallisce GATE_EVIDENCE, aggiungi evidenza/riferimento concreto ai gate interessati.
+6. Non cambiare arbitrariamente finale, protagonisti, causalità, innesco o invarianti già validi.
+7. Restituisci L'INTERO piano aggiornato, non una patch.
+8. Restituisci SOLO JSON valido, senza markdown e senza commenti esterni.
+
+Mantieni la stessa struttura JSON del piano ricevuto.`;
+}
+
 function storyPrompt(engine,plan,seed,words,language){
 return `${engine}
 
@@ -256,6 +290,7 @@ async function runAction(body,env){
   let prompt,temp=.4,max=8192;
   if(body.action==="baseline"){prompt=baselinePrompt(body.seed,body.words,body.language);temp=.9}
   else if(body.action==="rs_plan"){prompt=planPrompt(body.engine,body.seed,body.words,body.language);temp=.2;max=12000}
+  else if(body.action==="repair_plan"){prompt=repairPlanPrompt(body.engine,body.plan,body.validation,body.seed,body.words,body.language,body.attempt||1);temp=.1;max=12000}
   else if(body.action==="robot_stories"){prompt=storyPrompt(body.engine,body.plan,body.seed,body.words,body.language);temp=.7;max=12000}
   else if(body.action==="arbiter"){prompt=arbiterPrompt(body.engine,body.plan,body.story);temp=.1;max=10000}
   else if(body.action==="editor"){prompt=editorPrompt(body.x,body.y);temp=.2;max=8000}

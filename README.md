@@ -47,3 +47,15 @@ Dopo il deploy, apri l'app e carica `robot_stories_engine_v10_8_clean.md` una so
 ## Nota di sicurezza
 Per il laboratorio personale questa soluzione evita di pubblicare il motore come asset web.
 Per un futuro prodotto pubblico che usa Robot Stories internamente, il motore dovrà essere custodito lato server in storage privato e non inviato al browser.
+
+
+## V2.2 — Auto-Repair pre-prosa
+- Se il Validator blocca il piano, il Lab non passa subito a FAIL.
+- Esegue fino a 2 repair chirurgici sullo stesso provider/modello della generazione.
+- Il repair riceve solo il piano corrente e gli errori deterministici del Validator.
+- Non deve rigenerare il piano: conserva gli artefatti validi e corregge solo i blocchi.
+- Dopo ogni repair il Validator deterministico viene rieseguito.
+- La prosa parte solo dopo PASS.
+- Dopo 2 repair falliti: stato definitivo `PRE-PROSE FAILED`.
+- Ogni tentativo è conservato in `repairHistory` ed esportato nel JSON.
+- Nessun cambio automatico del motore Robot Stories.
