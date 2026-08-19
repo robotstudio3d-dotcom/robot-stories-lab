@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Robot Stories Lab</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="shell">
+<header>
+  <div class="brand">
+    <h1>ROBOT<br>STORIES LAB</h1>
+    <p>Laboratorio A/B per stress-test narrativi. Una sola regia, chiamate isolate, risultati comparabili.</p>
+  </div>
+  <div class="pill" id="apiPill">API: controllo…</div>
+</header>
+
+<div class="grid">
+  <aside class="panel sticky">
+    <h2>New experiment</h2>
+    <label>Innesco</label>
+    <textarea id="seed">Otto anni per Saturno. Un gruppo di astronauti decide di suicidarsi prima di arrivare su Saturno. Dalla Terra scoprono che era stato tutto architettato da una persona per circa 31 anni.</textarea>
+
+    <div class="row">
+      <div><label>Parole</label><input id="words" type="number" value="2000" min="500" max="12000"></div>
+      <div><label>Lingua</label><select id="language"><option>Italiano</option><option>English</option></select></div>
+    </div>
+
+    <label>Robot Stories Engine</label>
+    <input id="engineFile" type="file" accept=".md,.txt">
+    <textarea id="engine" style="min-height:180px" placeholder="Caricamento motore…"></textarea>
+
+    <label>Access key laboratorio (opzionale)</label>
+    <input id="accessKey" type="password" placeholder="Solo se configurata nel Worker">
+
+    <div class="actions">
+      <button class="primary" id="runBtn">RUN EXPERIMENT</button>
+      <button class="ghost" id="exportBtn">EXPORT JSON</button>
+      <button class="danger" id="clearBtn">CLEAR</button>
+    </div>
+    <div class="status" id="status">Pronto.</div>
+
+    <div class="section">
+      <h3>History</h3>
+      <div id="history"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="steps">
+      <div class="step" data-step="1">Baseline</div>
+      <div class="step" data-step="2">Robot Stories</div>
+      <div class="step" data-step="3">Arbitro</div>
+      <div class="step" data-step="4">Editor</div>
+      <div class="step" data-step="5">Reader</div>
+      <div class="step" data-step="6">Report</div>
+    </div>
+
+    <section class="panel">
+      <h2>Experiment output</h2>
+      <div class="cards">
+        <article class="card">
+          <div class="card-head"><strong>TEXT A</strong><span class="small" id="labelA">—</span></div>
+          <div class="card-body" id="storyA">Nessun test eseguito.</div>
+        </article>
+        <article class="card">
+          <div class="card-head"><strong>TEXT B</strong><span class="small" id="labelB">—</span></div>
+          <div class="card-body" id="storyB">Nessun test eseguito.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel section">
+      <h2>Blind verdict</h2>
+      <div class="metric-grid">
+        <div class="metric"><b id="winner">—</b><span>Editor winner</span></div>
+        <div class="metric"><b id="readerWinner">—</b><span>Reader preference</span></div>
+        <div class="metric"><b id="execScore">—</b><span>RS execution</span></div>
+        <div class="metric"><b id="rsResult">—</b><span>RS result</span></div>
+      </div>
+    </section>
+
+    <section class="panel section">
+      <h2>Arbitro di conformità</h2>
+      <pre class="json" id="arbiter">—</pre>
+    </section>
+    <section class="panel section">
+      <h2>Editor cieco</h2>
+      <pre class="json" id="editor">—</pre>
+    </section>
+    <section class="panel section">
+      <h2>Reader cieco</h2>
+      <pre class="json" id="reader">—</pre>
+    </section>
+    <section class="panel section">
+      <h2>Diagnosi del singolo test</h2>
+      <pre class="json" id="diagnostic">—</pre>
+    </section>
+  </main>
+</div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
