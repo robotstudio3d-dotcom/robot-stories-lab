@@ -1,58 +1,49 @@
-# Robot Stories Lab MVP
+# Robot Stories Lab V2
 
-Laboratorio web A/B per confrontare una baseline narrativa contro Robot Stories in chiamate AI isolate.
+Seconda versione del laboratorio A/B.
 
-## Cosa fa
-1. Genera una baseline usando solo innesco + lunghezza.
-2. Genera Robot Stories usando lo stesso innesco + motore Markdown.
-3. Verifica il testo RS con un Arbitro di conformità.
-4. Mescola casualmente A/B e avvia un Editor cieco.
-5. Avvia un Reader cieco.
-6. Produce una diagnosi del singolo test senza modificare automaticamente il motore.
-7. Salva fino a 30 esperimenti nel `localStorage` del browser.
-8. Esporta ogni esperimento in JSON.
+## Correzioni rispetto a V1
+- Fase separata `RS Plan`: gli artefatti pre-prosa vengono generati e conservati.
+- L'Arbitro riceve sia piano sia prosa e non pretende più che A1-A19 compaiano nel racconto.
+- Checkpoint dopo ogni fase.
+- Esperimenti `PARTIAL` conservati.
+- `RETRY FAILED` ripete solo la fase fallita.
+- `RESUME` riparte dal primo step mancante.
+- Export JSON disponibile anche per test incompleti.
+- Retry automatici con backoff su 429/5xx/sovraccarico.
+- Supporto opzionale Gemini, Groq e OpenRouter.
+- Fallback automatico tra provider configurati.
+- Robot Stories Engine NON è più dentro `public/` o nel pacchetto web. Si carica localmente da `.md` e viene conservato nel localStorage del browser.
 
-## Perché le chiamate sono isolate
-Ogni operazione invia a Gemini un singolo `contents` con un solo messaggio utente.
-Non viene passata cronologia di chat, memoria personale o output delle altre fasi, salvo quando quella fase necessita esplicitamente del testo da valutare.
+## Secret Cloudflare
+Obbligatorio almeno uno:
+- `GEMINI_API_KEY`
+- `GROQ_API_KEY`
+- `OPENROUTER_API_KEY`
 
-## Requisiti
-- account Cloudflare
-- Node.js
-- una Gemini API key
-- facoltativo: una password privata `LAB_ACCESS_KEY`
+Opzionale:
+- `LAB_ACCESS_KEY`
 
-## Installazione
-```bash
-npm install
-```
+Variabili modello predefinite in `wrangler.toml`:
+- Gemini: `gemini-3.6-flash`
+- Groq: `openai/gpt-oss-120b`
+- OpenRouter: `openrouter/free`
 
-Imposta i secret:
-```bash
-npx wrangler secret put GEMINI_API_KEY
-npx wrangler secret put LAB_ACCESS_KEY
-```
-`LAB_ACCESS_KEY` è opzionale. Se non la imposti, chiunque conosca l'URL può eseguire test usando la tua API key.
+## Aggiornamento da V1
+Sostituisci nel repository i file:
+- `src/index.js`
+- `public/index.html`
+- `public/app.js`
+- `public/styles.css`
+- `package.json`
+- `wrangler.toml`
+- `README.md`
 
-## Avvio locale
-```bash
-npm run dev
-```
+ELIMINA dal repository:
+- `public/robot_stories_engine_default.md`
 
-## Deploy
-```bash
-npm run deploy
-```
+Dopo il deploy, apri l'app e carica `robot_stories_engine_v10_8_clean.md` una sola volta. Il browser lo ricorderà localmente.
 
-Cloudflare assegnerà un URL `*.workers.dev`. Puoi poi collegare un dominio personalizzato dal pannello Cloudflare.
-
-## Motore
-`public/robot_stories_engine_default.md` contiene il motore predefinito incluso nel pacchetto.
-Dalla UI puoi anche caricare un altro `.md` senza modificare il codice.
-
-## Costi
-L'app non contiene abbonamenti o servizi a pagamento obbligatori nel codice. Cloudflare Workers ha un piano Free con limiti. Le eventuali quote/costi del modello Gemini dipendono dal tuo account Google e dal modello scelto.
-
-## Nota sperimentale
-Non usare il punteggio di un singolo esperimento per aggiungere nuove regole a Robot Stories.
-Il laboratorio salva dati per cercare ricorrenze su più test.
+## Nota di sicurezza
+Per il laboratorio personale questa soluzione evita di pubblicare il motore come asset web.
+Per un futuro prodotto pubblico che usa Robot Stories internamente, il motore dovrà essere custodito lato server in storage privato e non inviato al browser.
